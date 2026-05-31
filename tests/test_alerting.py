@@ -3,6 +3,8 @@ from unittest.mock import patch, MagicMock
 from src.alerting import send_telegram_message
 
 
+@patch("src.alerting.TELEGRAM_CHAT_ID", "123456")
+@patch("src.alerting.TELEGRAM_BOT_TOKEN", "fake-token")
 @patch("src.alerting.requests.post")
 def test_send_message_success(mock_post):
     mock_post.return_value = MagicMock(status_code=200)
@@ -11,6 +13,8 @@ def test_send_message_success(mock_post):
     mock_post.assert_called_once()
 
 
+@patch("src.alerting.TELEGRAM_CHAT_ID", "123456")
+@patch("src.alerting.TELEGRAM_BOT_TOKEN", "fake-token")
 @patch("src.alerting.requests.post")
 def test_send_message_failure(mock_post):
     mock_post.side_effect = requests.RequestException("Network error")
