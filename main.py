@@ -1,34 +1,44 @@
 from src.scraper import get_price
-from src.storage import init_db, save_price, get_price_history
-from src.alerting import send_telegram_message, send_price_alert
-from src.config import PRODUCTS
+from src.storage import init_db, get_all_products, save_price, deactivate_product
+from src.alerting import send_price_alert, send_telegram_message
 
 
 def main():
     init_db()
+    products = get_all_products()
 
-    for product in PRODUCTS:
+    if not products:
+        print("No products to monitor. Add some via the API.")
+        return
+
+    for product in products:
         print(f"Checking: {product['name']}")
-        price = get_price(product["url"])
+        try:
+            price = get_price(product["url"])
+        except Exception as e:
+            print(f"  -> Error: {e}")
+            # Notify and deactivate if the page is gone
+            if "404" in str(e):
+                send_telegram_message(
+                    f"⚠️ <b>Dead link</b>\n\n"
+                    f"{product['name']}\n"
+                    f"URL no longer available. Product deactivated."
+                )
+                deactivate_product(product["id"])
+            continue
 
         if price is None:
             print("  -> Could not retrieve price")
             continue
 
-        save_price(product["name"], product["url"], price)
+        save_price(product["id"], price)
         print(f"  -> Current price: {price:.2f} EUR (saved)")
 
-        # Alert if price drops below threshold
         if price < product["alert_below"]:
             print(f"  -> ALERT: below {product['alert_below']:.2f} EUR!")
-            send_price_alert(product["name"], price, product["alert_below"], product["url"])
-
-        # Show recent history
-        history = get_price_history(product["name"], limit=5)
-        if len(history) > 1:
-            print(f"  -> History ({len(history)} entries):")
-            for entry in history:
-                print(f"     {entry['checked_at']} : {entry['price']:.2f} EUR")
+            send_price_alert(
+                product["name"], price, product["alert_below"], product["url"]
+            )
 
 
 if __name__ == "__main__":
