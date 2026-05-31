@@ -1,3 +1,4 @@
+from src.sync import sync_products
 from src.scraper import get_price
 from src.storage import init_db, get_all_products, save_price, deactivate_product
 from src.alerting import send_price_alert, send_telegram_message
@@ -5,10 +6,12 @@ from src.alerting import send_price_alert, send_telegram_message
 
 def main():
     init_db()
+    sync_products()
+
     products = get_all_products()
 
     if not products:
-        print("No products to monitor. Add some via the API.")
+        print("No products to monitor.")
         return
 
     for product in products:
@@ -17,7 +20,6 @@ def main():
             price = get_price(product["url"])
         except Exception as e:
             print(f"  -> Error: {e}")
-            # Notify and deactivate if the page is gone
             if "404" in str(e):
                 send_telegram_message(
                     f"⚠️ <b>Dead link</b>\n\n"
