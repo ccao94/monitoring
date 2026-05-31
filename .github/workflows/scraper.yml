@@ -1,0 +1,42 @@
+name: Price Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours
+  workflow_dispatch: # manual trigger from GitHub UI
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download existing database
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: prices-db
+          path: .
+          search_artifacts: true
+          if_no_artifact_found: warn
+
+      - name: Run scraper
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Upload database
+        uses: actions/upload-artifact@v4
+        with:
+          name: prices-db
+          path: prices.db
+          overwrite: true
