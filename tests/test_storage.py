@@ -1,20 +1,22 @@
+import psycopg2
 import pytest
 
 from src.storage import (
     add_product,
-    get_all_products,
-    get_product,
-    delete_product,
     deactivate_product,
-    save_price,
+    delete_product,
+    get_all_products,
     get_latest_price,
     get_price_history,
+    get_product,
+    save_price,
 )
 
 pytestmark = pytest.mark.usefixtures("test_db")
 
 
 # --- Products ---
+
 
 def test_add_and_get_product():
     product = add_product("GPU Test", "https://example.com/gpu", 500.00)
@@ -26,7 +28,7 @@ def test_add_and_get_product():
 
 def test_duplicate_url_raises():
     add_product("GPU", "https://example.com/gpu", 500.00)
-    with pytest.raises(Exception):
+    with pytest.raises(psycopg2.IntegrityError):
         add_product("GPU again", "https://example.com/gpu", 400.00)
 
 
@@ -61,6 +63,7 @@ def test_delete_cascades_price_history():
 
 
 # --- Prices ---
+
 
 def test_save_and_get_latest():
     product = add_product("GPU", "https://example.com/gpu", 500.00)

@@ -1,8 +1,8 @@
 import requests
 
-SIGNIFICANT_DROP = 0.10  # alert on drops of 10% or more
-
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+SIGNIFICANT_DROP = 0.10  # alert on drops of 10% or more
 
 
 def decide_alert(previous: float | None, current: float, threshold: float) -> str | None:
@@ -19,6 +19,7 @@ def decide_alert(previous: float | None, current: float, threshold: float) -> st
         return "drop"
 
     return None
+
 
 def send_telegram_message(message: str) -> bool:
     """Send a message via Telegram bot. Returns True if successful."""
@@ -49,9 +50,10 @@ def send_price_alert(product_name: str, price: float, threshold: float, url: str
         f"<b>{product_name}</b>\n"
         f"Current price: <b>{price:.2f} €</b>\n"
         f"Your threshold: {threshold:.2f} €\n\n"
-        f"<a href=\"{url}\">View on LDLC</a>"
+        f'<a href="{url}">View on LDLC</a>'
     )
     send_telegram_message(message)
+
 
 def send_price_drop(product_name: str, old_price: float, new_price: float, url: str):
     """Send an alert for a significant price drop."""

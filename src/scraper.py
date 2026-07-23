@@ -19,6 +19,7 @@ class ScrapeResult:
 
     status is one of: ok, not_found, blocked, network_error, parse_error
     """
+
     status: str
     price: float | None = None
     detail: str = ""

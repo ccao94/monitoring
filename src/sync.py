@@ -1,6 +1,6 @@
 import json
 
-from src.storage import init_db, add_product, get_all_products, delete_product
+from src.storage import add_product, delete_product, get_all_products, init_db
 
 PRODUCTS_FILE = "products.json"
 
@@ -9,7 +9,7 @@ def sync_products():
     """Sync products from products.json into the database."""
     init_db()
 
-    with open(PRODUCTS_FILE, "r") as f:
+    with open(PRODUCTS_FILE) as f:
         desired = json.load(f)
 
     desired_urls = {p["url"] for p in desired}

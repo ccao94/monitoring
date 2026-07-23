@@ -1,10 +1,9 @@
 import requests
 
-from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from src.storage import init_db, get_all_products, save_price
-from src.scraper import get_price
 from src.alerting import send_telegram_message
-
+from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from src.scraper import get_price
+from src.storage import get_all_products, init_db, save_price
 
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
@@ -47,8 +46,7 @@ def handle_command(text: str) -> str:
         lines = []
         for p in products:
             lines.append(
-                f"<b>[{p['id']}]</b> {p['name']}\n"
-                f"    Alert below {p['alert_below']:.2f} €"
+                f"<b>[{p['id']}]</b> {p['name']}\n    Alert below {p['alert_below']:.2f} €"
             )
         return "\n\n".join(lines)
 

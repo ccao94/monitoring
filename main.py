@@ -1,11 +1,20 @@
 import sys
 
-from src.sync import sync_products
+from src.alerting import (
+    decide_alert,
+    send_price_alert,
+    send_price_drop,
+    send_telegram_message,
+)
 from src.scraper import get_price
 from src.storage import (
-    init_db, get_all_products, save_price, deactivate_product, get_latest_price
+    deactivate_product,
+    get_all_products,
+    get_latest_price,
+    init_db,
+    save_price,
 )
-from src.alerting import send_price_alert, send_price_drop, send_telegram_message
+from src.sync import sync_products
 
 STATUS_MESSAGES = {
     "not_found": "Page no longer exists (404).",
@@ -37,7 +46,7 @@ def main() -> int:
 
             threshold = product["alert_below"]
             decision = decide_alert(previous, result.price, threshold)
-            
+
             if decision == "threshold":
                 print(f"  -> ALERT: crossed below {threshold:.2f} EUR")
                 send_price_alert(product["name"], result.price, threshold, product["url"])

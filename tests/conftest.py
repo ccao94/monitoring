@@ -3,7 +3,7 @@ import os
 import pytest
 
 import src.storage
-from src.storage import init_db, get_connection
+from src.storage import get_connection, init_db
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",

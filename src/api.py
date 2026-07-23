@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 
-from src.storage import init_db, get_all_products, get_product, get_price_history
+from src.storage import get_all_products, get_price_history, get_product, init_db
 
 app = FastAPI(title="Price Monitor API")
 

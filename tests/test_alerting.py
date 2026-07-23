@@ -1,5 +1,7 @@
+from unittest.mock import MagicMock, patch
+
 import requests
-from unittest.mock import patch, MagicMock
+
 from src.alerting import send_telegram_message
 
 

@@ -1,6 +1,7 @@
+from datetime import UTC, datetime
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime, timezone
 
 from src.config import DATABASE_URL
 
@@ -38,6 +39,7 @@ def init_db():
 
 # --- Products ---
 
+
 def add_product(name: str, url: str, alert_below: float) -> dict:
     conn = get_connection()
     cursor = conn.cursor()
@@ -47,7 +49,7 @@ def add_product(name: str, url: str, alert_below: float) -> dict:
         VALUES (%s, %s, %s, %s)
         RETURNING id, name, url, alert_below
         """,
-        (name, url, alert_below, datetime.now(timezone.utc)),
+        (name, url, alert_below, datetime.now(UTC)),
     )
     row = cursor.fetchone()
     conn.commit()
@@ -101,12 +103,13 @@ def deactivate_product(product_id: int):
 
 # --- Price history ---
 
+
 def save_price(product_id: int, price: float):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO price_history (product_id, price, checked_at) VALUES (%s, %s, %s)",
-        (product_id, price, datetime.now(timezone.utc)),
+        (product_id, price, datetime.now(UTC)),
     )
     conn.commit()
     conn.close()
@@ -137,8 +140,7 @@ def get_price_history(product_id: int, limit: int = 10) -> list[dict]:
     rows = cursor.fetchall()
     conn.close()
     return [
-        {"price": float(row["price"]), "checked_at": row["checked_at"].isoformat()}
-        for row in rows
+        {"price": float(row["price"]), "checked_at": row["checked_at"].isoformat()} for row in rows
     ]
 
 
