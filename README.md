@@ -4,6 +4,11 @@ Automated price tracker for hardware and tech products. Scrapes product pages, s
 
 Runs automatically every 6 hours via GitHub Actions - no server needed.
 
+**Live dashboard:** https://price-monitor-gj4e.onrender.com
+
+Hosted on a free tier - the first request after a period of inactivity takes
+about a minute to wake the service.
+
 ## How it works
 
 1. Products to monitor are listed in `products.json` (URL + price threshold)
@@ -23,6 +28,7 @@ Runs automatically every 6 hours via GitHub Actions - no server needed.
 - **Kubernetes / Minikube** - CronJob deployment (local demo)
 - **PyTest** - 48 tests, run against a real database
 - **Ruff** - linting and formatting, enforced in CI
+- **Render** - hosted API and dashboard, deployed from render.yaml
 
 ## Project structure
 

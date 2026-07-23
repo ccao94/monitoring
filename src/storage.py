@@ -177,3 +177,38 @@ def get_latest_prices() -> dict[int, dict]:
         }
         for row in rows
     }
+
+
+def get_price_series(points: int = 40) -> dict[int, list[dict]]:
+    """Recent price points for every product, oldest first.
+
+    ROW_NUMBER() ranks each product's rows independently thanks to the
+    PARTITION BY, so the outer WHERE keeps the N most recent per product
+    instead of the N most recent overall.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT product_id, price, checked_at
+        FROM (
+            SELECT product_id, price, checked_at,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY product_id ORDER BY checked_at DESC
+                   ) AS rank
+            FROM price_history
+        ) ranked
+        WHERE rank <= %s
+        ORDER BY product_id, checked_at
+        """,
+        (points,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    series: dict[int, list[dict]] = {}
+    for row in rows:
+        series.setdefault(row["product_id"], []).append(
+            {"price": float(row["price"]), "checked_at": row["checked_at"]}
+        )
+    return series

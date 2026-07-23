@@ -9,6 +9,7 @@ from src.storage import (
     get_latest_price,
     get_latest_prices,
     get_price_history,
+    get_price_series,
     get_product,
     save_price,
 )
@@ -110,3 +111,26 @@ def test_latest_prices_returns_one_row_per_product():
 def test_latest_prices_ignores_products_without_history():
     add_product("GPU", "https://example.com/1", 500.00)
     assert get_latest_prices() == {}
+
+
+def test_price_series_is_per_product_and_chronological():
+    first = add_product("GPU", "https://example.com/1", 500.00)
+    second = add_product("CPU", "https://example.com/2", 300.00)
+    save_price(first["id"], 600.00)
+    save_price(first["id"], 580.00)
+    save_price(second["id"], 290.00)
+
+    series = get_price_series(points=10)
+
+    assert [p["price"] for p in series[first["id"]]] == [600.00, 580.00]
+    assert [p["price"] for p in series[second["id"]]] == [290.00]
+
+
+def test_price_series_limits_per_product():
+    product = add_product("GPU", "https://example.com/1", 500.00)
+    for price in (600.00, 590.00, 580.00):
+        save_price(product["id"], price)
+
+    series = get_price_series(points=2)
+
+    assert len(series[product["id"]]) == 2
