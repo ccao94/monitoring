@@ -1,7 +1,5 @@
 import sys
 
-SIGNIFICANT_DROP = 0.10  # alert on drops of 10% or more
-
 from src.sync import sync_products
 from src.scraper import get_price
 from src.storage import (
@@ -38,16 +36,12 @@ def main() -> int:
             print(f"  -> {result.price:.2f} EUR (saved)")
 
             threshold = product["alert_below"]
-            crossed = result.price < threshold and (previous is None or previous >= threshold)
-            big_drop = (
-                previous is not None
-                and result.price < previous * (1 - SIGNIFICANT_DROP)
-            )
+            decision = decide_alert(previous, result.price, threshold)
             
-            if crossed:
+            if decision == "threshold":
                 print(f"  -> ALERT: crossed below {threshold:.2f} EUR")
                 send_price_alert(product["name"], result.price, threshold, product["url"])
-            elif big_drop:
+            elif decision == "drop":
                 print(f"  -> ALERT: dropped from {previous:.2f} EUR")
                 send_price_drop(product["name"], previous, result.price, product["url"])
             continue
