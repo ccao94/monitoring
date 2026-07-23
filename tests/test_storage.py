@@ -1,6 +1,6 @@
-import os
+import pytest
+
 from src.storage import (
-    init_db,
     add_product,
     get_all_products,
     get_product,
@@ -10,19 +10,8 @@ from src.storage import (
     get_latest_price,
     get_price_history,
 )
-import src.storage
 
-TEST_DB = "test_prices.db"
-
-
-def setup_function():
-    src.storage.DB_PATH = TEST_DB
-    init_db()
-
-
-def teardown_function():
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+pytestmark = pytest.mark.usefixtures("test_db")
 
 
 # --- Products ---
@@ -32,22 +21,26 @@ def test_add_and_get_product():
     assert product["name"] == "GPU Test"
     fetched = get_product(product["id"])
     assert fetched["url"] == "https://example.com/gpu"
+    assert fetched["alert_below"] == 500.00
+
+
+def test_duplicate_url_raises():
+    add_product("GPU", "https://example.com/gpu", 500.00)
+    with pytest.raises(Exception):
+        add_product("GPU again", "https://example.com/gpu", 400.00)
 
 
 def test_list_active_products():
     add_product("GPU 1", "https://example.com/1", 500.00)
     add_product("GPU 2", "https://example.com/2", 600.00)
-    products = get_all_products(active_only=True)
-    assert len(products) == 2
+    assert len(get_all_products(active_only=True)) == 2
 
 
 def test_deactivate_product():
     product = add_product("GPU", "https://example.com/gpu", 500.00)
     deactivate_product(product["id"])
-    active = get_all_products(active_only=True)
-    all_products = get_all_products(active_only=False)
-    assert len(active) == 0
-    assert len(all_products) == 1
+    assert len(get_all_products(active_only=True)) == 0
+    assert len(get_all_products(active_only=False)) == 1
 
 
 def test_delete_product():
@@ -58,6 +51,13 @@ def test_delete_product():
 
 def test_delete_nonexistent():
     assert delete_product(999) is False
+
+
+def test_delete_cascades_price_history():
+    product = add_product("GPU", "https://example.com/gpu", 500.00)
+    save_price(product["id"], 599.90)
+    delete_product(product["id"])
+    assert get_price_history(product["id"]) == []
 
 
 # --- Prices ---

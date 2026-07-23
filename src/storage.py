@@ -1,13 +1,14 @@
-import sqlite3
-from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from datetime import datetime, timezone
 
-DB_PATH = "prices.db"
+from src.config import DATABASE_URL
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # access columns by name
-    return conn
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 
 def init_db():
@@ -15,21 +16,20 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             url TEXT NOT NULL UNIQUE,
-            alert_below REAL NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL
+            alert_below NUMERIC(10, 2) NOT NULL,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS price_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL,
-            price REAL NOT NULL,
-            checked_at TEXT NOT NULL,
-            FOREIGN KEY (product_id) REFERENCES products(id)
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            price NUMERIC(10, 2) NOT NULL,
+            checked_at TIMESTAMPTZ NOT NULL
         )
     """)
     conn.commit()
@@ -42,40 +42,49 @@ def add_product(name: str, url: str, alert_below: float) -> dict:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO products (name, url, alert_below, created_at) VALUES (?, ?, ?, ?)",
-        (name, url, alert_below, datetime.now().isoformat()),
+        """
+        INSERT INTO products (name, url, alert_below, created_at)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id, name, url, alert_below
+        """,
+        (name, url, alert_below, datetime.now(timezone.utc)),
     )
+    row = cursor.fetchone()
     conn.commit()
-    product_id = cursor.lastrowid
     conn.close()
-    return {"id": product_id, "name": name, "url": url, "alert_below": alert_below}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "url": row["url"],
+        "alert_below": float(row["alert_below"]),
+    }
 
 
 def get_all_products(active_only: bool = True) -> list[dict]:
     conn = get_connection()
     cursor = conn.cursor()
     if active_only:
-        cursor.execute("SELECT * FROM products WHERE active = 1")
+        cursor.execute("SELECT * FROM products WHERE active = TRUE ORDER BY id")
     else:
-        cursor.execute("SELECT * FROM products")
-    rows = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM products ORDER BY id")
+    rows = cursor.fetchall()
     conn.close()
-    return rows
+    return [_product_to_dict(row) for row in rows]
 
 
 def get_product(product_id: int) -> dict | None:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
+    cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _product_to_dict(row) if row else None
 
 
 def delete_product(product_id: int) -> bool:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
     deleted = cursor.rowcount > 0
     conn.commit()
     conn.close()
@@ -85,7 +94,7 @@ def delete_product(product_id: int) -> bool:
 def deactivate_product(product_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE products SET active = 0 WHERE id = ?", (product_id,))
+    cursor.execute("UPDATE products SET active = FALSE WHERE id = %s", (product_id,))
     conn.commit()
     conn.close()
 
@@ -96,8 +105,8 @@ def save_price(product_id: int, price: float):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO price_history (product_id, price, checked_at) VALUES (?, ?, ?)",
-        (product_id, price, datetime.now().isoformat()),
+        "INSERT INTO price_history (product_id, price, checked_at) VALUES (%s, %s, %s)",
+        (product_id, price, datetime.now(timezone.utc)),
     )
     conn.commit()
     conn.close()
@@ -107,21 +116,38 @@ def get_latest_price(product_id: int) -> float | None:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT price FROM price_history WHERE product_id = ? ORDER BY checked_at DESC LIMIT 1",
+        "SELECT price FROM price_history WHERE product_id = %s ORDER BY checked_at DESC LIMIT 1",
         (product_id,),
     )
     row = cursor.fetchone()
     conn.close()
-    return row["price"] if row else None
+    return float(row["price"]) if row else None
 
 
 def get_price_history(product_id: int, limit: int = 10) -> list[dict]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT price, checked_at FROM price_history WHERE product_id = ? ORDER BY checked_at DESC LIMIT ?",
+        """
+        SELECT price, checked_at FROM price_history
+        WHERE product_id = %s ORDER BY checked_at DESC LIMIT %s
+        """,
         (product_id, limit),
     )
-    rows = [dict(row) for row in cursor.fetchall()]
+    rows = cursor.fetchall()
     conn.close()
-    return rows
+    return [
+        {"price": float(row["price"]), "checked_at": row["checked_at"].isoformat()}
+        for row in rows
+    ]
+
+
+def _product_to_dict(row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "url": row["url"],
+        "alert_below": float(row["alert_below"]),
+        "active": row["active"],
+        "created_at": row["created_at"].isoformat(),
+    }

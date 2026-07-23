@@ -1,0 +1,9 @@
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: monitoring
+      POSTGRES_PASSWORD: monitoring
+      POSTGRES_DB: monitoring_test
+    ports:
+      - "5433:5432"

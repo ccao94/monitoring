@@ -2,8 +2,8 @@ name: Price Monitor
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours
-  workflow_dispatch: # manual trigger from GitHub UI
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 jobs:
   check-prices:
@@ -20,23 +20,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download existing database
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          name: prices-db
-          path: .
-          search_artifacts: true
-          if_no_artifact_found: warn
-
       - name: Run scraper
         env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
-
-      - name: Upload database
-        uses: actions/upload-artifact@v4
-        with:
-          name: prices-db
-          path: prices.db
-          overwrite: true
