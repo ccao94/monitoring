@@ -34,3 +34,16 @@ def send_price_alert(product_name: str, price: float, threshold: float, url: str
         f"<a href=\"{url}\">View on LDLC</a>"
     )
     send_telegram_message(message)
+
+def send_price_drop(product_name: str, old_price: float, new_price: float, url: str):
+    """Send an alert for a significant price drop."""
+    diff = old_price - new_price
+    percent = (diff / old_price) * 100
+    message = (
+        f"📉 <b>Price drop</b>\n\n"
+        f"<b>{product_name}</b>\n"
+        f"{old_price:.2f} € → <b>{new_price:.2f} €</b>\n"
+        f"-{diff:.2f} € (-{percent:.1f}%)\n\n"
+        f'<a href="{url}">View product</a>'
+    )
+    send_telegram_message(message)

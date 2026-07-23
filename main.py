@@ -1,10 +1,13 @@
 import sys
 
+SIGNIFICANT_DROP = 0.10  # alert on drops of 10% or more
+
 from src.sync import sync_products
 from src.scraper import get_price
-from src.storage import init_db, get_all_products, save_price, deactivate_product
-from src.alerting import send_price_alert, send_telegram_message
-
+from src.storage import (
+    init_db, get_all_products, save_price, deactivate_product, get_latest_price
+)
+from src.alerting import send_price_alert, send_price_drop, send_telegram_message
 
 STATUS_MESSAGES = {
     "not_found": "Page no longer exists (404).",
@@ -30,13 +33,23 @@ def main() -> int:
         result = get_price(product["url"])
 
         if result.status == "ok":
+            previous = get_latest_price(product["id"])
             save_price(product["id"], result.price)
             print(f"  -> {result.price:.2f} EUR (saved)")
-            if result.price < product["alert_below"]:
-                print(f"  -> ALERT: below {product['alert_below']:.2f} EUR")
-                send_price_alert(
-                    product["name"], result.price, product["alert_below"], product["url"]
-                )
+
+            threshold = product["alert_below"]
+            crossed = result.price < threshold and (previous is None or previous >= threshold)
+            big_drop = (
+                previous is not None
+                and result.price < previous * (1 - SIGNIFICANT_DROP)
+            )
+            
+            if crossed:
+                print(f"  -> ALERT: crossed below {threshold:.2f} EUR")
+                send_price_alert(product["name"], result.price, threshold, product["url"])
+            elif big_drop:
+                print(f"  -> ALERT: dropped from {previous:.2f} EUR")
+                send_price_drop(product["name"], previous, result.price, product["url"])
             continue
 
         failures += 1
