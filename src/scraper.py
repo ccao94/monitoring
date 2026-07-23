@@ -1,62 +1,140 @@
 import json
-import re
+import time
+from dataclasses import dataclass
 
 import requests
 from bs4 import BeautifulSoup
 
 from src.config import HEADERS
 
+MAX_RETRIES = 3
+RETRY_DELAY = 2
+TIMEOUT = 15
+MAX_PLAUSIBLE_PRICE = 100_000
 
-def fetch_page(url: str) -> str:
-    """Fetch a product page and return raw HTML."""
-    response = requests.get(url, headers=HEADERS, timeout=15)
-    response.raise_for_status()
-    return response.text
+
+@dataclass
+class ScrapeResult:
+    """Outcome of a scrape attempt.
+
+    status is one of: ok, not_found, blocked, network_error, parse_error
+    """
+    status: str
+    price: float | None = None
+    detail: str = ""
+
+
+def _to_float(raw) -> float | None:
+    """Convert a price string to float. Handles '1 299,95 €' and '659.90'."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    for char in ("\xa0", "\u202f", " ", "€", "EUR"):
+        text = text.replace(char, "")
+    text = text.replace(",", ".")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def fetch_page(url: str) -> tuple[str, str | None]:
+    """Fetch a product page. Returns (status, html).
+
+    Retries on network errors and 5xx, never on 404 or 403.
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        except requests.RequestException:
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY * attempt)
+                continue
+            return "network_error", None
+
+        if response.status_code in (404, 410):
+            return "not_found", None
+
+        if response.status_code in (401, 403, 429):
+            return "blocked", None
+
+        if response.status_code >= 500:
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY * attempt)
+                continue
+            return "network_error", None
+
+        if response.status_code != 200:
+            return "network_error", None
+
+        return "ok", response.text
+
+    return "network_error", None
 
 
 def parse_price_from_jsonld(html: str) -> float | None:
-    """Try to extract price from JSON-LD structured data."""
+    """Extract price from JSON-LD structured data."""
     soup = BeautifulSoup(html, "html.parser")
-    scripts = soup.find_all("script", type="application/ld+json")
 
-    for script in scripts:
+    for script in soup.find_all("script", type="application/ld+json"):
+        if not script.string:
+            continue
         try:
             data = json.loads(script.string)
-            # JSON-LD can be a single object or a list
-            items = data if isinstance(data, list) else [data]
-            for item in items:
-                if item.get("@type") == "Product":
-                    offers = item.get("offers", {})
-                    # offers can be a dict or a list
-                    if isinstance(offers, list):
-                        offers = offers[0]
-                    price = offers.get("price")
-                    if price is not None:
-                        return float(price)
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except json.JSONDecodeError:
             continue
 
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict) or item.get("@type") != "Product":
+                continue
+            offers = item.get("offers")
+            if isinstance(offers, list):
+                offers = offers[0] if offers else None
+            if not isinstance(offers, dict):
+                continue
+            price = _to_float(offers.get("price"))
+            if price is not None:
+                return price
+
     return None
 
 
-def parse_price_from_html(html: str) -> float | None:
-    """Fallback: extract price using regex on the raw HTML.
+def parse_price_from_meta(html: str) -> float | None:
+    """Extract price from microdata or Open Graph meta tags."""
+    soup = BeautifulSoup(html, "html.parser")
+    candidates = [
+        {"itemprop": "price"},
+        {"property": "product:price:amount"},
+        {"property": "og:price:amount"},
+    ]
 
-    LDLC displays prices like '659€90' or '659,90 €'.
-    """
-    # Pattern: digits + € + digits (e.g. 659€90)
-    match = re.search(r'(\d[\d\s]*)\s*€\s*(\d{2})', html)
-    if match:
-        euros = match.group(1).replace(" ", "")
-        cents = match.group(2)
-        return float(f"{euros}.{cents}")
+    for attrs in candidates:
+        element = soup.find("meta", attrs=attrs)
+        if element and element.get("content"):
+            price = _to_float(element["content"])
+            if price is not None:
+                return price
+
     return None
 
 
-def get_price(url: str) -> float | None:
+def is_plausible(price: float) -> bool:
+    return 0 < price < MAX_PLAUSIBLE_PRICE
+
+
+def get_price(url: str) -> ScrapeResult:
     """Fetch a product page and extract its price."""
-    html = fetch_page(url)
-    price = parse_price_from_jsonld(html)
-    if price is not None:
-        return price
-    return parse_price_from_html(html)
+    status, html = fetch_page(url)
+    if status != "ok":
+        return ScrapeResult(status=status)
+
+    for parser in (parse_price_from_jsonld, parse_price_from_meta):
+        price = parser(html)
+        if price is None:
+            continue
+        if not is_plausible(price):
+            return ScrapeResult("parse_error", detail=f"implausible price: {price}")
+        return ScrapeResult("ok", price=price)
+
+    return ScrapeResult("parse_error", detail="no structured price data found")

@@ -1,5 +1,3 @@
-import time
-
 import requests
 
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -29,18 +27,18 @@ def handle_command(text: str) -> str:
     command = parts[0].lower().split("@")[0]  # ignore @botname suffix
 
     if command == "/start":
-            return (
-                "🔍 <b>Price Monitor Bot</b>\n\n"
-                "<b>Commands:</b>\n"
-                "/list — show all monitored products\n"
-                "/check — check all prices now"
-            )
+        return (
+            "🔍 <b>Price Monitor Bot</b>\n\n"
+            "<b>Commands:</b>\n"
+            "/list — show all monitored products\n"
+            "/check — check all prices now"
+        )
 
     elif command in ("/watch", "/remove"):
-            return (
-                "Products are managed in <code>products.json</code>.\n"
-                "Edit the file, commit and push — the next run picks it up."
-            )
+        return (
+            "Products are managed in <code>products.json</code>.\n"
+            "Edit the file, commit and push — the next run picks it up."
+        )
 
     elif command == "/list":
         products = get_all_products()
@@ -60,18 +58,15 @@ def handle_command(text: str) -> str:
             return "No products to check."
         results = []
         for p in products:
-            try:
-                price = get_price(p["url"])
-                if price is not None:
-                    save_price(p["id"], price)
-                    line = f"✅ {p['name']}: <b>{price:.2f} €</b>"
-                    if price < p["alert_below"]:
-                        line += " 📉 BELOW THRESHOLD!"
-                    results.append(line)
-                else:
-                    results.append(f"❌ {p['name']}: could not get price")
-            except Exception as e:
-                results.append(f"❌ {p['name']}: error")
+            result = get_price(p["url"])
+            if result.status == "ok":
+                save_price(p["id"], result.price)
+                line = f"✅ {p['name']}: <b>{result.price:.2f} €</b>"
+                if result.price < p["alert_below"]:
+                    line += " 📉 BELOW THRESHOLD!"
+                results.append(line)
+            else:
+                results.append(f"❌ {p['name']}: {result.status}")
         return "\n\n".join(results)
 
     return "Unknown command. Try /start"
