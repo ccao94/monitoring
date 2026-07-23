@@ -7,6 +7,7 @@ from src.storage import (
     delete_product,
     get_all_products,
     get_latest_price,
+    get_latest_prices,
     get_price_history,
     get_product,
     save_price,
@@ -90,3 +91,22 @@ def test_price_history():
     history = get_price_history(product["id"], limit=2)
     assert len(history) == 2
     assert history[0]["price"] == 550.00
+
+
+def test_latest_prices_returns_one_row_per_product():
+    first = add_product("GPU", "https://example.com/1", 500.00)
+    second = add_product("CPU", "https://example.com/2", 300.00)
+    save_price(first["id"], 600.00)
+    save_price(first["id"], 550.00)
+    save_price(second["id"], 280.00)
+
+    latest = get_latest_prices()
+
+    assert len(latest) == 2
+    assert latest[first["id"]]["price"] == 550.00
+    assert latest[second["id"]]["price"] == 280.00
+
+
+def test_latest_prices_ignores_products_without_history():
+    add_product("GPU", "https://example.com/1", 500.00)
+    assert get_latest_prices() == {}

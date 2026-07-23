@@ -153,3 +153,27 @@ def _product_to_dict(row) -> dict:
         "active": row["active"],
         "created_at": row["created_at"].isoformat(),
     }
+
+
+def get_latest_prices() -> dict[int, dict]:
+    """Latest price for every product, in a single query.
+
+    DISTINCT ON keeps the first row per product_id, and the ORDER BY
+    decides which one that is.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT ON (product_id) product_id, price, checked_at
+        FROM price_history
+        ORDER BY product_id, checked_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return {
+        row["product_id"]: {
+            "price": float(row["price"]),
+            "checked_at": row["checked_at"],
+        }
+        for row in rows
+    }
