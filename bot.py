@@ -3,7 +3,7 @@ import time
 import requests
 
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from src.storage import init_db, add_product, get_all_products, delete_product, save_price
+from src.storage import init_db, get_all_products, save_price
 from src.scraper import get_price
 from src.alerting import send_telegram_message
 
@@ -29,29 +29,18 @@ def handle_command(text: str) -> str:
     command = parts[0].lower().split("@")[0]  # ignore @botname suffix
 
     if command == "/start":
-        return (
-            "🔍 <b>Price Monitor Bot</b>\n\n"
-            "<b>Commands:</b>\n"
-            "/watch &lt;url&gt; &lt;price&gt; &lt;name&gt; — add a product\n"
-            "/list — show all monitored products\n"
-            "/remove &lt;id&gt; — remove a product\n"
-            "/check — check all prices now"
-        )
+            return (
+                "🔍 <b>Price Monitor Bot</b>\n\n"
+                "<b>Commands:</b>\n"
+                "/list — show all monitored products\n"
+                "/check — check all prices now"
+            )
 
-    elif command == "/watch":
-        if len(parts) < 4:
-            return "Usage: /watch &lt;url&gt; &lt;alert_price&gt; &lt;product name&gt;"
-        url = parts[1]
-        try:
-            alert_below = float(parts[2])
-        except ValueError:
-            return "Price must be a number."
-        name = " ".join(parts[3:])
-        try:
-            add_product(name, url, alert_below)
-            return f"✅ Added: <b>{name}</b>\nAlert below: {alert_below:.2f} €"
-        except Exception:
-            return "❌ A product with this URL already exists."
+    elif command in ("/watch", "/remove"):
+            return (
+                "Products are managed in <code>products.json</code>.\n"
+                "Edit the file, commit and push — the next run picks it up."
+            )
 
     elif command == "/list":
         products = get_all_products()
@@ -64,17 +53,6 @@ def handle_command(text: str) -> str:
                 f"    Alert below {p['alert_below']:.2f} €"
             )
         return "\n\n".join(lines)
-
-    elif command == "/remove":
-        if len(parts) < 2:
-            return "Usage: /remove &lt;id&gt;"
-        try:
-            product_id = int(parts[1])
-        except ValueError:
-            return "ID must be a number."
-        if delete_product(product_id):
-            return f"✅ Product {product_id} removed."
-        return "❌ Product not found."
 
     elif command == "/check":
         products = get_all_products()
