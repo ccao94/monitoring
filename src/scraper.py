@@ -46,6 +46,7 @@ def _to_float(raw) -> float | None:
     except ValueError:
         return None
 
+
 def looks_blocked(html: str) -> bool:
     """Detect a 200 response that is really a bot-check page.
 
@@ -56,6 +57,7 @@ def looks_blocked(html: str) -> bool:
         return True
     head = html[:4000].lower()
     return any(marker in head for marker in BLOCK_MARKERS)
+
 
 def fetch_page(url: str) -> tuple[str, str | None]:
     """Fetch a product page. Returns (status, html).
