@@ -6,9 +6,13 @@ from src.scraper import (
     _to_float,
     fetch_page,
     get_price,
+    looks_blocked,
     parse_price_from_jsonld,
     parse_price_from_meta,
 )
+
+# A body large enough to pass the size check, unlike a bot-check page.
+PAGE = "<html><body>" + "product " * 1000 + "</body></html>"
 
 
 def _response(status_code: int, text: str = ""):
@@ -93,13 +97,29 @@ class TestParseMeta:
         assert parse_price_from_meta("<html></html>") is None
 
 
+class TestLooksBlocked:
+    def test_short_page(self):
+        assert looks_blocked("<html>nope</html>") is True
+
+    def test_captcha_wording(self):
+        assert looks_blocked("<html>captcha required" + "x" * 6000) is True
+
+    def test_marker_deep_in_page_is_ignored(self):
+        # The word appears past the head window, so it is page content,
+        # not a bot wall.
+        assert looks_blocked(PAGE + "captcha") is False
+
+    def test_real_page(self):
+        assert looks_blocked(PAGE) is False
+
+
 class TestFetchPage:
     @patch("src.scraper.requests.get")
     def test_success(self, mock_get):
-        mock_get.return_value = _response(200, "<html>ok</html>")
+        mock_get.return_value = _response(200, PAGE)
         status, html = fetch_page("https://example.com")
         assert status == "ok"
-        assert html == "<html>ok</html>"
+        assert html == PAGE
 
     @patch("src.scraper.requests.get")
     def test_404_is_not_retried(self, mock_get):
@@ -114,6 +134,13 @@ class TestFetchPage:
         status, _ = fetch_page("https://example.com")
         assert status == "blocked"
 
+    @patch("src.scraper.requests.get")
+    def test_bot_wall_is_blocked(self, mock_get):
+        mock_get.return_value = _response(200, "<html>captcha</html>")
+        status, _ = fetch_page("https://example.com")
+        assert status == "blocked"
+        assert mock_get.call_count == 1
+
     @patch("src.scraper.time.sleep")
     @patch("src.scraper.requests.get")
     def test_server_error_is_retried(self, mock_get, mock_sleep):
@@ -127,11 +154,11 @@ class TestFetchPage:
     def test_recovers_after_transient_error(self, mock_get, mock_sleep):
         mock_get.side_effect = [
             requests.Timeout("timed out"),
-            _response(200, "<html>ok</html>"),
+            _response(200, PAGE),
         ]
         status, html = fetch_page("https://example.com")
         assert status == "ok"
-        assert mock_get.call_count == 2
+        assert html == PAGE
 
 
 class TestGetPrice:

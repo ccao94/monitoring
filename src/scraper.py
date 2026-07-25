@@ -11,6 +11,14 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2
 TIMEOUT = 15
 MAX_PLAUSIBLE_PRICE = 100_000
+MIN_PAGE_SIZE = 5000
+BLOCK_MARKERS = (
+    "captcha",
+    "unusual traffic",
+    "are you a human",
+    "enable javascript",
+    "access denied",
+)
 
 
 @dataclass
@@ -38,6 +46,16 @@ def _to_float(raw) -> float | None:
     except ValueError:
         return None
 
+def looks_blocked(html: str) -> bool:
+    """Detect a 200 response that is really a bot-check page.
+
+    Product pages are large. A short body, or bot-check wording near the
+    top, means the site answered with a wall instead of the product.
+    """
+    if len(html) < MIN_PAGE_SIZE:
+        return True
+    head = html[:4000].lower()
+    return any(marker in head for marker in BLOCK_MARKERS)
 
 def fetch_page(url: str) -> tuple[str, str | None]:
     """Fetch a product page. Returns (status, html).
@@ -65,8 +83,8 @@ def fetch_page(url: str) -> tuple[str, str | None]:
                 continue
             return "network_error", None
 
-        if response.status_code != 200:
-            return "network_error", None
+        if looks_blocked(response.text):
+            return "blocked", None
 
         return "ok", response.text
 
