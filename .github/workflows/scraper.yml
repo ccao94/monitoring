@@ -1,8 +1,8 @@
 name: Price Monitor
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
+  # schedule:
+  #   - cron: "0 */6 * * *"  # disabled: retailers block datacenter IPs
   workflow_dispatch:
 
 jobs:
