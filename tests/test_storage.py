@@ -19,6 +19,16 @@ from src.storage import (
 pytestmark = pytest.mark.usefixtures("test_db")
 
 
+def _query(sql: str, params: tuple) -> list[dict]:
+    """Run a read-only query directly, to check tables and views."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
 # --- Products ---
 
 
@@ -146,14 +156,49 @@ def test_scrape_runs_keep_failures():
     save_scrape_run(product["id"], "ok", 599.90, 1200)
     save_scrape_run(product["id"], "blocked", None, 300)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
+    rows = _query(
         "SELECT status, price FROM scrape_run WHERE product_id = %s ORDER BY id",
         (product["id"],),
     )
-    rows = cursor.fetchall()
-    conn.close()
 
     assert [row["status"] for row in rows] == ["ok", "blocked"]
     assert rows[1]["price"] is None
+
+
+# --- Data quality views ---
+
+
+def test_quality_view_computes_success_rate():
+    product = add_product("GPU", "https://www.example.com/gpu", 500.00)
+    save_scrape_run(product["id"], "ok", 599.90, 1000)
+    save_scrape_run(product["id"], "ok", 599.90, 1200)
+    save_scrape_run(product["id"], "blocked", None, 300)
+
+    rows = _query("SELECT * FROM v_scrape_quality WHERE product_id = %s", (product["id"],))
+
+    assert rows[0]["site"] == "www.example.com"
+    assert rows[0]["attempts"] == 3
+    assert rows[0]["successes"] == 2
+    assert float(rows[0]["success_rate_pct"]) == 66.7
+
+
+def test_quality_view_keeps_products_without_attempts():
+    product = add_product("GPU", "https://example.com/gpu", 500.00)
+
+    rows = _query("SELECT * FROM v_scrape_quality WHERE product_id = %s", (product["id"],))
+
+    assert rows[0]["attempts"] == 0
+    assert rows[0]["success_rate_pct"] is None
+
+
+def test_price_changes_view_flags_suspicious_jumps():
+    product = add_product("GPU", "https://example.com/gpu", 500.00)
+    save_price(product["id"], 100.00)
+    save_price(product["id"], 100.00)
+    save_price(product["id"], 150.00)
+
+    rows = _query("SELECT * FROM v_price_changes WHERE product_id = %s", (product["id"],))
+
+    assert len(rows) == 1
+    assert float(rows[0]["change_pct"]) == 50.0
+    assert rows[0]["is_suspicious"] is True

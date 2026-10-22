@@ -1,9 +1,12 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from src.config import DATABASE_URL
+
+VIEWS_FILE = Path(__file__).parent / "views.sql"
 
 
 def get_connection():
@@ -43,6 +46,8 @@ def init_db():
             checked_at TIMESTAMPTZ NOT NULL
         )
     """)
+    # Views depend on the tables above, so they are created last
+    cursor.execute(VIEWS_FILE.read_text(encoding="utf-8"))
     conn.commit()
     conn.close()
 
@@ -154,35 +159,6 @@ def get_price_history(product_id: int, limit: int = 10) -> list[dict]:
     ]
 
 
-# --- Scrape runs ---
-
-
-def save_scrape_run(product_id: int, status: str, price: float | None, duration_ms: int):
-    """Record every scrape attempt, successful or not."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO scrape_run (product_id, status, price, duration_ms, checked_at)
-        VALUES (%s, %s, %s, %s, %s)
-        """,
-        (product_id, status, price, duration_ms, datetime.now(UTC)),
-    )
-    conn.commit()
-    conn.close()
-
-
-def _product_to_dict(row) -> dict:
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "url": row["url"],
-        "alert_below": float(row["alert_below"]),
-        "active": row["active"],
-        "created_at": row["created_at"].isoformat(),
-    }
-
-
 def get_latest_prices() -> dict[int, dict]:
     """Latest price for every product, in a single query.
 
@@ -240,3 +216,32 @@ def get_price_series(points: int = 40) -> dict[int, list[dict]]:
             {"price": float(row["price"]), "checked_at": row["checked_at"]}
         )
     return series
+
+
+# --- Scrape runs ---
+
+
+def save_scrape_run(product_id: int, status: str, price: float | None, duration_ms: int):
+    """Record every scrape attempt, successful or not."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO scrape_run (product_id, status, price, duration_ms, checked_at)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (product_id, status, price, duration_ms, datetime.now(UTC)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _product_to_dict(row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "url": row["url"],
+        "alert_below": float(row["alert_below"]),
+        "active": row["active"],
+        "created_at": row["created_at"].isoformat(),
+    }
