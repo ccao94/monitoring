@@ -5,7 +5,8 @@
 
 Price tracker for tech products. It scrapes product pages, stores the price history in
 PostgreSQL, and sends a Telegram alert when a price crosses below a threshold or drops by
-10% or more.
+10% or more. Every scrape attempt is logged, and SQL views turn that journal into data
+quality indicators.
 
 ## Stack
 
@@ -39,8 +40,8 @@ docker compose up -d test-db
 pytest
 ```
 
-57 tests, run against a real PostgreSQL instance rather than mocks. GitHub Actions runs
-lint, tests and the Docker build on every push.
+61 tests, run against a real PostgreSQL instance rather than mocks, including the SQL
+views. GitHub Actions runs lint, tests and the Docker build on every push.
 
 ## Design notes
 
@@ -62,9 +63,15 @@ message on every run, only the crossing does.
 **Failures are visible.** Each scrape returns a typed status. If every product fails, the
 run exits non-zero so the job turns red instead of passing silently.
 
+**Data quality is measured, not assumed.** Every attempt is logged in `scrape_run`,
+successful or not, separately from the clean price history. SQL views compute the success
+rate per site, freshness, completeness and suspicious price changes. Calculation rules are
+defined once in `src/views.sql` and documented in [docs/kpi.md](docs/kpi.md).
+
 ## Where it runs
 
 Scheduled runs on GitHub Actions were disabled: the failure check above revealed that
-retailers block datacenter IP ranges, so every cloud run was refused. Scraping now runs
-from a residential connection, manually or through the Kubernetes CronJob in `k8s/`.
-The dashboard stays online and reads the shared database.
+retailers block datacenter IP ranges, so every cloud run was refused. Collection now runs
+every hour from a residential connection, through a Windows scheduled task
+(`scripts/run_scraper.ps1`). A Kubernetes CronJob version is kept in `k8s/`. The dashboard
+stays online and reads the shared database.
