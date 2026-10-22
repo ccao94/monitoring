@@ -33,6 +33,16 @@ def init_db():
             checked_at TIMESTAMPTZ NOT NULL
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scrape_run (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            status TEXT NOT NULL,
+            price NUMERIC(10, 2),
+            duration_ms INTEGER NOT NULL,
+            checked_at TIMESTAMPTZ NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -142,6 +152,24 @@ def get_price_history(product_id: int, limit: int = 10) -> list[dict]:
     return [
         {"price": float(row["price"]), "checked_at": row["checked_at"].isoformat()} for row in rows
     ]
+
+
+# --- Scrape runs ---
+
+
+def save_scrape_run(product_id: int, status: str, price: float | None, duration_ms: int):
+    """Record every scrape attempt, successful or not."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO scrape_run (product_id, status, price, duration_ms, checked_at)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (product_id, status, price, duration_ms, datetime.now(UTC)),
+    )
+    conn.commit()
+    conn.close()
 
 
 def _product_to_dict(row) -> dict:

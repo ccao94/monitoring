@@ -6,12 +6,14 @@ from src.storage import (
     deactivate_product,
     delete_product,
     get_all_products,
+    get_connection,
     get_latest_price,
     get_latest_prices,
     get_price_history,
     get_price_series,
     get_product,
     save_price,
+    save_scrape_run,
 )
 
 pytestmark = pytest.mark.usefixtures("test_db")
@@ -134,3 +136,24 @@ def test_price_series_limits_per_product():
     series = get_price_series(points=2)
 
     assert len(series[product["id"]]) == 2
+
+
+# --- Scrape runs ---
+
+
+def test_scrape_runs_keep_failures():
+    product = add_product("GPU", "https://example.com/gpu", 500.00)
+    save_scrape_run(product["id"], "ok", 599.90, 1200)
+    save_scrape_run(product["id"], "blocked", None, 300)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT status, price FROM scrape_run WHERE product_id = %s ORDER BY id",
+        (product["id"],),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    assert [row["status"] for row in rows] == ["ok", "blocked"]
+    assert rows[1]["price"] is None

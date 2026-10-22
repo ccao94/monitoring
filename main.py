@@ -1,4 +1,5 @@
 import sys
+import time
 
 from src.alerting import (
     decide_alert,
@@ -13,6 +14,7 @@ from src.storage import (
     get_latest_price,
     init_db,
     save_price,
+    save_scrape_run,
 )
 from src.sync import sync_products
 
@@ -37,7 +39,11 @@ def main() -> int:
 
     for product in products:
         print(f"Checking: {product['name']}")
+
+        start = time.perf_counter()
         result = get_price(product["url"])
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        save_scrape_run(product["id"], result.status, result.price, duration_ms)
 
         if result.status == "ok":
             previous = get_latest_price(product["id"])
